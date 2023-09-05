@@ -8,92 +8,61 @@ customtkinter.set_appearance_mode("dark")
 customtkinter.set_default_color_theme("dark-blue")
 
 root = customtkinter.CTk()
-root.geometry("375x350")  # Adjusted for better visual layout
-
-# Dynamically generate the data_arrays structure
-print("Generating data arrays...")
-num_slots = 4  # As per your current design
+root.geometry("375x350")
 
 card_types = {
-    "16 Digital Input": ("I", 16, 1),
-    "16 Digital Output": ("O", 16, 2),
-    "32 Digital Input": ("I", 32, 1),
-    "32 Digital Output": ("O", 32, 2)
+    "16 Digital Input": ("I", 16),
+    "16 Digital Output": ("O", 16),
+    "32 Digital Input": ("I", 32),
+    "32 Digital Output": ("O", 32)
 }
 
-data_arrays = {}
-selector_counters = {1: 0, 2: 0}
-
-for slot in range(1, num_slots + 1):
-    for card_name, (prefix, count, selector_num) in card_types.items():
-        key = f"{card_name} (Slot {slot})"
-        data_arrays[key] = [(f"{{::[P01]local:{slot}:{prefix}.Data.{i}}}", selector_num) for i in range(count)]
-
-def generate_rows_based_on_cards(cards):
+def generate_all_selectors(server_name):
     rows = []
-
-    # Reset the selector_counts every time this function is called
-    selector_counts = {
-        "I": 0,  # For Digital Inputs
-        "O": 0,  # For Digital Outputs
-    }
-
-    for card_num, card_type in enumerate(cards, start=1):
-        if card_type == "No Card":
-            continue  # Skip this iteration if "No Card" is selected
-
-        col_name = f"{card_type} (Slot {card_num})"
-        values_array = data_arrays.get(col_name, [])
-        prefix = card_types[card_type][0]  # Correctly retrieve the prefix
-
-        for i, (en_us_entry, selector_num) in enumerate(values_array):
-            en_us = en_us_entry.replace("{::[P01]local:1", f"{{::[P01]local:{card_num}")
-            desc = f"ControlListSelector{selector_num}.{selector_counts[prefix]}.St_Caption"
-            
-            # Increment the selector count for the specific type (I or O)
-            selector_counts[prefix] += 1
-
-            # Update the en-US format with card number
-            en_us_formatted = f"/*N:1 {en_us} NOFILL DP:0*/   local:{card_num}:{en_us.split(':')[-1]}  {prefix}{card_num}/{i}"
-            
-            rows.append({"Server": server_name, "Component Type": "Graphic Display", "Component Name": "M916_IO", "Description": desc, "en-US": en_us_formatted})
-
-    print(f"Generated {len(rows)} rows.")
+    for selector_num in range(1, 5):
+        for i in range(128):
+            desc = f"ControlListSelector{selector_num}.{i}.St_Caption"
+            rows.append({
+                "Server": server_name,
+                "Component Type": "Graphic Display",
+                "Component Name": "M916_IO",
+                "Description": desc,
+                "en-US": ""
+            })
     return rows
 
-def process_excel_file(file_path):
-    global server_name
+def generate_rows(cards, server_name, all_rows):
+    selector_counts = [0, 0, 0, 0]
 
+    for slot_num, card_type in enumerate(cards, start=1):
+        if card_type == "No Card":
+            continue
+
+        prefix, count = card_types[card_type]
+        selector_num = 1 if "Input" in card_type else 2
+
+        for i in range(count):
+            en_us = f"{{::[P01]local:{slot_num}:{prefix}.Data.{i}}}"
+            idx = (selector_num - 1) * 128 + selector_counts[selector_num-1]
+            all_rows[idx]["en-US"] = f"/*N:1 {en_us} NOFILL DP:0*/   local:{slot_num}:{en_us.split(':')[-1].split('}')[0]}  {prefix}{slot_num}/{i}"
+            
+            selector_counts[selector_num-1] += 1
+
+def process_excel_file(file_path):
     try:
         df = pd.read_excel(file_path)
-
-        # Storing server name from the original data for further use
         server_name = df["Server"].iloc[0]
+        df = df[~df['Description'].str.startswith("ControlListSelector")]
 
-        # Identify rows that match the given conditions using the provided column names
-        rows_to_delete = df[(df['Component Name'].str.contains("M916_IO", na=False)) & 
-                            (df['Description'].str.contains("ControlListSelector", na=False))]
-
-        # Drop these rows
-        df = df.drop(rows_to_delete.index)
-
-        # Generating rows based on card selections
+        all_rows = generate_all_selectors(server_name)
         cards = [menu.get() for menu in menus]
-        new_rows = generate_rows_based_on_cards(cards)
-
-        # Appending new rows to the dataframe
-        df = pd.concat([df, pd.DataFrame(new_rows)], ignore_index=True)
-
-        # Save the modified dataframe back to the same Excel file
+        generate_rows(cards, server_name, all_rows)
+        
+        df = pd.concat([df, pd.DataFrame(all_rows)], ignore_index=True)
         df.to_excel(file_path, index=False)
-
-        print(f"Processed file: {file_path}")
         
-        # Success message
         messagebox.showinfo("Success", "File processed successfully!")
-        
     except Exception as e:
-        # Error message
         messagebox.showerror("Error", f"An error occurred: {str(e)}")
 
 def select_excel_file():
