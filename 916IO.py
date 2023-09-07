@@ -20,7 +20,7 @@ card_types = {
 def generate_all_selectors(server_name):
     rows = []
     for selector_num in range(1, 5):
-        for i in range(128):
+        for i in range(256):
             desc = f"ControlListSelector{selector_num}.{i}.St_Caption"
             rows.append({
                 "Server": server_name,
@@ -42,8 +42,8 @@ def generate_rows(cards, server_name, all_rows):
         selector_num = 1 if "Input" in card_type else 2
 
         for i in range(count):
-            en_us = f"{{::[P01]local:{slot_num}:{prefix}.Data.{i}}}"
-            idx = (selector_num - 1) * 128 + selector_counts[selector_num-1]
+            en_us = f"{{::[P01]Local:{slot_num}:{prefix}.Data.{i}}}"
+            idx = (selector_num - 1) * 256 + selector_counts[selector_num-1]
             all_rows[idx]["en-US"] = f"/*N:1 {en_us} NOFILL DP:0*/   local:{slot_num}:{en_us.split(':')[-1].split('}')[0]}  {prefix}{slot_num}/{i}"
             
             selector_counts[selector_num-1] += 1
